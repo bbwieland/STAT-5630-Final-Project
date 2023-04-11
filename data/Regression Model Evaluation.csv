@@ -1,0 +1,6 @@
+"","Prediction.Method","Mean.squared.error"
+"1","Sample Mean",0.843025548095602
+"2","Linear Regression (All variables)",0.160274361002301
+"3","Linear Regression (Reduced Model)",0.0847039226806639
+"4","Ridge Regression",0.188227391829326
+"5","Lasso Regression",0.16031110547389
