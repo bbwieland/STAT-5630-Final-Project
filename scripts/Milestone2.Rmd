@@ -1,0 +1,229 @@
+---
+title: "STAT Milestone 2 Clean"
+author: "Kevin Zhang"
+date: "2023-04-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(jpeg)
+library(rasterImage)
+library(class)
+library(ggplot2)
+library(caret)
+library(png)
+library(tidyverse)
+library(lubridate)
+library(e1071)
+library(mvtnorm)
+library(glmnet)
+library(dplyr)
+library(tidyverse)
+library(glmnet)
+library(MLmetrics)
+```
+
+```{r}
+
+set.seed(4133) # For reproducibility of the analysis
+#theme_set(theme_bw(base_family = "Poppins")) # Setting a graphic style for the analysis
+theme_set(theme_grey())
+data = read.csv("/Users/kevinzhang/Downloads/insurance.csv")
+names(data)[names(data) == 'expenses'] <- 'charges'
+
+## Train-Test Split ----
+
+# We will use 70/30 train/test split size for our data
+
+train.indices = sample(1:nrow(data), 0.7 * nrow(data))
+train = data[train.indices,]
+test = data[-train.indices,]
+
+## Exploring a Response Variable Transformation ----
+
+# Visualizing our response variable's distribution with a histogram
+ggplot(data, aes(x = charges)) +
+  geom_histogram(bins = sqrt(nrow(data)), color = "black", fill = "grey") +
+  labs(x = "Medical Charges (dollars)", y = "Count", title = "Distribution of Response Variable")
+
+# Our linear methods for classification may work better with a more normally distributed response variable.
+# So we explore a logarithmic transformation.
+ggplot(data, aes(x = log(charges))) +
+  geom_histogram(bins = sqrt(nrow(data)), color = "black", fill = "grey") +
+  labs(x = "Medical Charges (dollars)", y = "Count", title = "Distribution of Response Variable")
+
+# This makes our data approximately normal, which is a desirable behavior.
+# We will model the log-transformed variable. 
+train$charges.log = log(train$charges)
+test$charges.log = log(test$charges)
+
+## EDA of Predictor Relationships with Response Variable ----
+
+# Let us analyze each variable individually. 
+
+# First our numeric predictors:
+
+# Age
+ggplot(train, aes(x = age, y = charges.log)) +
+  geom_point() +
+  labs(x = "Age", y = "log(Charges)", title = "Relationship of Age and Medical Charges")
+
+# BMI
+ggplot(train, aes(x = bmi, y = charges.log)) +
+  geom_point() +
+  labs(x = "BMI", y = "log(Charges)", title = "Relationship of BMI and Medical Charges")
+
+# Children (semi-categorical, but we can treat potentially as numeric)
+ggplot(train, aes(x = children, y = charges.log, group = children)) +
+  geom_boxplot() +
+  labs(x = "Children", y = "log(Charges)", title = "Relationship of Number of Children and Medical Charges")
+
+# Now our categorical predictors:
+
+# Sex
+ggplot(train, aes(x = sex, y = charges.log, group = sex)) +
+  geom_boxplot() +
+  labs(x = "Sex", y = "log(Charges)", title = "Relationship of Sex and Medical Charges")
+
+# Smoker
+ggplot(train, aes(x = smoker, y = charges.log, group = smoker)) +
+  geom_boxplot() +
+  labs(x = "Smoking Status", y = "log(Charges)", title = "Relationship of Smoking Status and Medical Charges")
+
+# Region
+ggplot(train, aes(x = region, y = charges.log, group = region)) +
+  geom_boxplot() +
+  labs(x = "Region", y = "log(Charges)", title = "Relationship of Residence Region and Medical Charges")
+
+```
+
+
+
+```{r}
+
+#Read in the data
+data = read.csv("/Users/kevinzhang/Downloads/insurance.csv")
+names(data)[names(data) == 'expenses'] <- 'charges'
+
+## Train-Test Split ----
+
+#Create the indices to split the data into 70/30
+set.seed(4133)
+train.indices = sample(1:nrow(data), 0.7 * nrow(data))
+
+#Create dummy variables and remove redundant variables
+dummy_region <- model.matrix(~ region - 1, data = data)
+dummy_sex <- model.matrix(~ sex - 1, data = data)
+dummy_smoker <- model.matrix(~ smoker - 1, data = data)
+data <- cbind(data, dummy_region)
+data <- cbind(data, dummy_smoker)
+data <- cbind(data, dummy_sex)
+data <- subset(data, select = -c(sexmale, sex, region, regionnortheast, smoker, smokerno))
+train = data[train.indices,]
+test = data[-train.indices,]
+
+#Use a log tranformation on our charges
+train$charges.log = log(train$charges)
+test$charges.log = log(test$charges)
+
+#Remove redundant variables
+train <- subset(train, select = -charges)
+test <- subset(test, select = -charges)
+
+
+#Calculate the baseline error using the mean as a predictor
+mean.baseline.error <- mean((test$charges.log- mean(train$charges.log))^2)
+
+
+  ##Ridge Regression Model ---
+
+# Create x and y training dataset
+x.train <- train[, -which(names(train) == "charges.log")]
+y.train <-train$charges.log
+
+# Fit a ridge regression model using 10-fold CV
+cv_fit <- cv.glmnet(data.matrix(x.train), y.train, alpha = 0, nfolds = 10, lambda = exp(seq(-10, 10, length.out = 1000)))
+
+# Find the best lambda
+best.lambda <- cv_fit$lambda.min
+
+# Fit the ridge model using best lambda
+insurance.fit <- glmnet(x.train, y.train, alpha = 0, lambda = best.lambda)
+
+# Use the model to generate predictions
+x.test <- data.matrix(test[, -which(names(test) == "charges.log")])
+y.test.pred <- predict(cv_fit, x.test)
+
+# Calculate the MSPE
+mse <- mean((test$charges.log - y.test.pred)^2)
+paste("Ridge MSE = ",mse)
+
+
+  ##Lasso Regression Model ---
+
+# Choose the best lasso regression model using 10-fold CV
+cv_fit_lasso <- cv.glmnet(data.matrix(x.train), y.train,
+                          alpha = 1, 
+                          nfolds = 10, 
+                          lambda = exp(seq(-10, 10, length.out = 10000)))
+best.lambda.lasso <- cv_fit_lasso$lambda.min
+final_fit_lasso <- glmnet(x.train, y.train,
+                          alpha = 1, 
+                          lambda = best.lambda.lasso)
+
+#Apply the model to create prediction using test data
+y_test_pred_lasso <- predict(final_fit_lasso, x.test)
+
+#Calculate the MSPE
+mse_lasso <- mean((test$charges.log - y_test_pred_lasso)^2)
+
+
+  ##OLS Linear Model ---
+
+fitted.linear <- lm(charges.log ~ ., data = train)
+# plug-in the estimated beta, and generate predictions of Y.
+y.pred <- predict(fitted.linear, data.frame(test))
+# Calculate the MPSE
+mspe.lm <- mean((y.pred - test$charges.log)^2)
+
+## Now fit the data using a reduced model
+
+#Remove the insignificant variable
+new.linear.data = subset(data, select = -regionnorthwest)
+train.linear = new.linear.data[train.indices,]
+test.linear = new.linear.data[-train.indices,]
+train.linear$charges.log = log(train.linear$charges)
+test.linear$charges.log = log(test.linear$charges)
+
+#Fit a generic linear model using the new data
+fitted.linear <- lm(charges.log ~ ., data = train.linear)
+# plug-in the estimated beta, and generate predictions of Y.
+y.pred <- predict(fitted.linear, data.frame(test.linear))
+# Find the MPSE
+mspe.lm.new <- mean((y.pred - test.linear$charges.log)^2)
+
+#Create a dataframe containing all the errors and prediction methods
+errors <- data.frame("Prediction Method" = c("Sample Mean", "Linear Regression (All variables)", "Linear Regression (Reduced Model)", "Ridge Regression", "Lasso Regression"), 
+                     "Mean-squared error" = c(mean.baseline.error,mspe.lm,mspe.lm.new, mse, mse_lasso) )
+
+#print out errors
+errors
+
+
+```
+
+```{r}
+library(corrplot)
+## Create a correlation plot to determine the 
+## pairwise corrrelation between inputs
+
+#Create a dataframe without explanatory to test correlation
+data_no_charges <- subset(data, select = -charges)
+# Calculate the correlation matrix
+cor.X <- cor(data_no_charges)
+# Create the correlation plot
+corrplot(cov.X, type = "upper", order = "hclust",
+tl.col = "black", tl.srt = 45)
+```
+

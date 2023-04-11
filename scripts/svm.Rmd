@@ -1,0 +1,145 @@
+---
+title: "SVM"
+author: "Davis Taliaferro"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+set.seed(1)
+library(MASS)
+library(caret)
+library(ggplot2)
+library(splines2)
+library(tidyr)
+library(e1071)
+
+#reading in data and converting categorical binary to binary
+health <- read.csv( "Downloads/insurance.csv")
+health$sex[health$sex == "female"] <- as.numeric(1)
+health$sex[health$sex == "male"] <- as.numeric(0)
+
+health$smoker[health$smoker == "yes"] <- as.numeric(1)
+health$smoker[health$smoker == "no"] <- as.numeric(0)
+
+#creating dummy variables for regions
+dummy_region <- dummyVars(" ~ .", data=health[, -1:-5])
+dummy_region <- data.frame(predict(dummy_region, newdata=health[,-1:-5]))
+
+#completing dataset
+health <- cbind(health[, -6:-7], data.frame(dummy_region))
+health$smoker <- as.numeric(as.character(health$smoker))
+
+#randomly sampling data to testing (30%) and training (70%) sets
+index <- sample(1:nrow(health), 937)
+train <- health[index, ]
+test <- health[-index, ]
+```
+
+OLS COMPARISON
+```{r}
+linearmodel = lm(train$smoker ~., data=train)
+y.pred <- predict(linearmodel, test[, -5])
+# MPSE
+outcome <- test[,5]
+y.pred <- as.integer(y.pred > 0.5)
+misClassError <- mean((test[, 5]) != as.numeric(y.pred))
+print(paste("Classification Success Rate", 1- misClassError))
+```
+
+LINEAR SVM
+```{r}
+library(caret)
+
+#creating folds for cross-validation utilizing k=15 because it gave me a stable result, wheras lower k values gave different results based on how data was randomly split
+folds <- createFolds(y = (y=health$smoker), k = 10, list = FALSE, returnTrain = FALSE)
+
+#creating potential costs for cross-validation
+costs <- c(0.0001, 0.001, 0.01, 0.1, 1, 10, 100)
+
+#completing cross-validation with different cost values
+meanerrors <- c();
+for(c in 1:7){
+  error<-c()
+  for (k in 1:5) {
+      nums <- c()
+      for(i in 1:683){
+        if(folds[i]==k){
+          nums <- c(nums, i)
+        }
+      }
+      train <- health[-nums, ]
+      test <- health[nums, ]
+      
+      #fitting nonlinear svm 
+      svmfit = svm(train$smoker ~., data = train, kernel = "linear", cost = costs[c], scale = FALSE)
+      y.pred <- predict(svmfit, test[,-5])
+      fclassification <- as.integer(y.pred > 0.5)
+      
+      #finding error rate
+      er <- mean((test$smoker != as.numeric(fclassification)))
+      error<-c(error, er)
+
+  }
+  meanerrors <- c(meanerrors, mean(error))
+    #acc <- data.frame(k=1/c(1:100), trER=ctr, tsER=cts)
+}
+
+#selecting the cost with the minimum mean error
+value <- which.min(meanerrors)
+
+#printing the results
+print(paste("The minimum error cost is c=", costs[value]))
+print(paste("The mean prediction error rate from the crossvalidation based on c=", costs[value], "is", meanerrors[value]))
+```
+
+NONLINEAR SVM
+```{r}
+library(caret)
+
+#creating folds for cross-validation utilizing k=15 because it gave me a stable result, wheras lower k values gave different results based on how data was randomly split
+folds <- createFolds(y = (y=health$smoker), k = 10, list = FALSE, returnTrain = FALSE)
+
+#creating potential costs for cross-validation
+costs <- c(0.0001, 0.001, 0.01, 0.1, 1, 10, 100)
+
+#completing cross-validation with different cost values
+meanerrors <- c();
+for(c in 1:7){
+  error<-c()
+  for (k in 1:5) {
+      nums <- c()
+      for(i in 1:683){
+        if(folds[i]==k){
+          nums <- c(nums, i)
+        }
+      }
+      train <- health[-nums, ]
+      test <- health[nums, ]
+      
+      #fitting nonlinear svm 
+      svmfit = svm(train$smoker ~., data = train, kernel = "radial", cost = costs[c], scale = FALSE)
+      y.pred <- predict(svmfit, test[,-5])
+      fclassification <- as.integer(y.pred > 0.5)
+      
+      #finding error rate
+      er <- mean((test$smoker != as.numeric(fclassification)))
+      error<-c(error, er)
+
+  }
+  meanerrors <- c(meanerrors, mean(error))
+    #acc <- data.frame(k=1/c(1:100), trER=ctr, tsER=cts)
+}
+
+#selecting the cost with the minimum mean error
+value <- which.min(meanerrors)
+
+#printing the results
+print(paste("The minimum error cost is c=", costs[value]))
+print(paste("The mean prediction error rate from the crossvalidation based on c=", costs[value], "is", meanerrors[value]))
+```
+
+```
+
