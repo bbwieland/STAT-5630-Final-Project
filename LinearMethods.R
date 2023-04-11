@@ -137,9 +137,9 @@ costs <- c(0.0001, 0.001, 0.01, 0.1, 1, 10, 100)
 meanerrors <- NULL
 for(c in 1:7){
   error<-NULL
-  for (k in 1:5) {
+  for (k in 1:10) {
     nums <- NULL
-    for(i in 1:683){
+    for(i in 1:1338){
       if(folds[i]==k){
         nums <- c(nums, i)
       }
@@ -147,7 +147,7 @@ for(c in 1:7){
     train.svm <- data.svm[-nums, ]
     test.svm <- data.svm[nums, ]
     
-    #fitting nonlinear svm 
+    #fitting linear svm 
     svmfit = svm(train.svm$smoker ~., data = train.svm %>% select(-response.numeric), kernel = "linear", cost = costs[c], scale = FALSE)
     y.pred <- predict(svmfit, test[,-5])
     fclassification <- as.integer(y.pred > 0.5)
@@ -158,7 +158,6 @@ for(c in 1:7){
     
   }
   meanerrors <- c(meanerrors, mean(error))
-  #acc <- data.frame(k=1/c(1:100), trER=ctr, tsER=cts)
 }
 
 #selecting the cost with the minimum mean error
@@ -168,7 +167,24 @@ value <- which.min(meanerrors)
 print(paste("The minimum error cost is c=", costs[value]))
 print(paste("The mean prediction error rate from the crossvalidation based on c=", costs[value], "is", meanerrors[value]))
 
-#creating folds for cross-validation utilizing k=15 because it gave me a stable result, wheras lower k values gave different results based on how data was randomly split
+#creating training and testing data and training the svm with our optimal cost
+index <- sample(1:nrow(data.svm), 0.7*nrow(data.svm))
+trainfinal <- data.svm[index, ]
+testfinal <- data.svm[-index, ]
+svmfinal<- svm(trainfinal$smoker ~., data = trainfinal, kernel = "linear", cost = costs[value], scale = FALSE)
+
+#predicting our testing data
+y.pred <- predict(svmfinal, testfinal[,-5])
+fclassification <- as.integer(y.pred > 0.5)
+
+#finding error rate
+er <- mean((testfinal$smoker != as.numeric(fclassification)))
+
+#output results
+print(paste("The accuracy is", 1-er))
+confusionMatrix(data=as.factor(fclassification), reference=as.factor(testfinal[,5]))
+
+#creating folds for cross-validation utilizing k=10 because it gave me a stable result, wheras lower k values gave different results based on how data was randomly split
 folds <- createFolds(y = (y=health$smoker), k = 10, list = FALSE, returnTrain = FALSE)
 
 #creating potential costs for cross-validation
@@ -178,9 +194,9 @@ costs <- c(0.0001, 0.001, 0.01, 0.1, 1, 10, 100)
 meanerrors <- c();
 for(c in 1:7){
   error<-c()
-  for (k in 1:5) {
+  for (k in 1:10) {
     nums <- c()
-    for(i in 1:683){
+    for(i in 1:1338){
       if(folds[i]==k){
         nums <- c(nums, i)
       }
@@ -199,7 +215,6 @@ for(c in 1:7){
     
   }
   meanerrors <- c(meanerrors, mean(error))
-  #acc <- data.frame(k=1/c(1:100), trER=ctr, tsER=cts)
 }
 
 #selecting the cost with the minimum mean error
@@ -208,6 +223,23 @@ value <- which.min(meanerrors)
 #printing the results
 print(paste("The minimum error cost is c=", costs[value]))
 print(paste("The mean prediction error rate from the crossvalidation based on c=", costs[value], "is", meanerrors[value]))
+
+#creating training and testing data and training the svm with our optimal cost
+index <- sample(1:nrow(data.svm), 0.7*nrow(data.svm))
+trainfinal <- data.svm[index, ]
+testfinal <- data.svm[-index, ]
+svmfinal<- svm(trainfinal$smoker ~., data = trainfinal, kernel = "radial", cost = costs[value], scale = FALSE)
+
+#predicting our testing data
+y.pred <- predict(svmfinal, testfinal[,-5])
+fclassification <- as.integer(y.pred > 0.5)
+
+#finding error rate
+er <- mean((testfinal$smoker != as.numeric(fclassification)))
+
+#output results
+print(paste("The accuracy is", 1-er))
+confusionMatrix(data=as.factor(fclassification), reference=as.factor(testfinal[,5]))
 
 # Code Block 3: Regression ----
 
