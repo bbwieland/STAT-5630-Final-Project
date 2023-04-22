@@ -17,7 +17,7 @@ library(gtExtras) # for styling tables
  
 set.seed(4133) # For reproducibility of the analysis
 theme_set(theme_bw(base_family = "Poppins")) # Setting a graphic style for the analysis
-data = read_csv("https://raw.githubusercontent.com/bbwieland/STAT-5630-Final-Project/main/data/insurance.csv") # import dta
+data = read_csv("https://raw.githubusercontent.com/bbwieland/STAT-5630-Final-Project/main/data/insurance.csv") # import data
 
 # Create response variable as factor & numeric, for different R implementations
 data$response = factor(data$smoker, levels = c("no","yes"))
